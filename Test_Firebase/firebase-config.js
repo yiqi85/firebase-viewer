@@ -3,13 +3,13 @@
 // You can find this in Firebase Console -> Project Settings -> Your apps
 
 const firebaseConfigTemplate = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCP4E0kMqMYTkANXyqFnVyVkzrspFDULVs",
+  authDomain: "test-angstromdevice.firebaseapp.com",
+  databaseURL: "https://test-angstromdevice-default-rtdb.firebaseio.com",
+  projectId: "test-angstromdevice",
+  storageBucket: "test-angstromdevice.firebasestorage.app",
+  messagingSenderId: "955489642820",
+  appId: "1:955489642820:web:43855b0c76af5001814f11"
 };
 
 // Example database structure for testing:
