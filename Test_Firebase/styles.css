@@ -6,6 +6,8 @@
     --text-color: #2c3e50;
     --border-color: #bdc3c7;
     --success-color: #27ae60;
+    --warning-color: #f39c12;
+    --danger-color: #e74c3c;
 }
 
 * {
@@ -30,40 +32,97 @@ body {
 header {
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
     color: white;
-    padding: 30px;
-    border-radius: 8px;
-    margin-bottom: 30px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-header h1 {
-    font-size: 2.5em;
-    margin-bottom: 10px;
-}
-
-header p {
-    font-size: 1.1em;
-    opacity: 0.9;
-}
-
-.config-section {
-    background: white;
     padding: 25px;
     border-radius: 8px;
     margin-bottom: 25px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.config-group {
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+header h1 {
+    font-size: 2em;
+    margin-bottom: 5px;
+}
+
+header p {
+    font-size: 0.95em;
+    opacity: 0.9;
+}
+
+.connection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 12px 15px;
+    border-radius: 6px;
+    backdrop-filter: blur(10px);
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #95a5a6;
+    animation: pulse 2s infinite;
+}
+
+.status-dot.connected {
+    background-color: #27ae60;
+}
+
+.status-dot.connecting {
+    background-color: #f39c12;
+}
+
+.status-dot.error {
+    background-color: #e74c3c;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+#connection-text {
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.connection-time {
+    font-size: 0.85em;
+    opacity: 0.8;
+}
+
+.selection-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
     margin-bottom: 20px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    align-items: flex-end;
 }
 
-.config-group:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
+.selection-group {
+    display: flex;
+    flex-direction: column;
 }
 
 label {
@@ -71,24 +130,31 @@ label {
     margin-bottom: 8px;
     font-weight: 600;
     color: var(--text-color);
+    font-size: 0.95em;
 }
 
-textarea,
+select,
 input[type="text"],
 input[type="date"],
 input[type="number"],
 input[type="color"] {
     padding: 10px 12px;
-    border: 1px solid var(--border-color);
+    border: 2px solid var(--border-color);
     border-radius: 4px;
-    font-size: 1em;
+    font-size: 0.95em;
     font-family: inherit;
     width: 100%;
-    margin-bottom: 10px;
-    transition: border-color 0.3s ease;
+    transition: all 0.3s ease;
 }
 
-textarea:focus,
+select:hover,
+input[type="text"]:hover,
+input[type="date"]:hover,
+input[type="number"]:hover {
+    border-color: var(--secondary-color);
+}
+
+select:focus,
 input[type="text"]:focus,
 input[type="date"]:focus,
 input[type="number"]:focus,
@@ -98,6 +164,12 @@ input[type="color"]:focus {
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
+.status-label {
+    font-size: 0.8em;
+    color: #7f8c8d;
+    margin-top: 4px;
+}
+
 button {
     padding: 10px 20px;
     background-color: var(--secondary-color);
@@ -105,11 +177,9 @@ button {
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 1em;
+    font-size: 0.95em;
     font-weight: 600;
     transition: all 0.3s ease;
-    margin-right: 10px;
-    margin-bottom: 10px;
 }
 
 button:hover {
@@ -122,6 +192,20 @@ button:active {
     transform: translateY(0);
 }
 
+button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.load-btn {
+    background-color: var(--success-color);
+}
+
+.load-btn:hover:not(:disabled) {
+    background-color: #229954;
+}
+
 .reset-btn {
     background-color: var(--accent-color);
 }
@@ -130,43 +214,91 @@ button:active {
     background-color: #c0392b;
 }
 
-.status {
-    display: inline-block;
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 0.9em;
-    font-weight: 600;
-    margin-left: 10px;
-}
-
-.status.connected {
+.apply-btn {
     background-color: var(--success-color);
-    color: white;
+    padding: 8px 16px;
+    font-size: 0.9em;
 }
 
-.status.disconnected {
-    background-color: #95a5a6;
-    color: white;
+.apply-btn:hover {
+    background-color: #229954;
 }
 
 .limits-section {
     background: white;
-    padding: 25px;
     border-radius: 8px;
-    margin-bottom: 25px;
+    margin-bottom: 20px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
 }
 
-.limits-section h3 {
-    margin-bottom: 15px;
+.limits-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #f9fafb;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.limits-header h3 {
     color: var(--primary-color);
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.toggle-btn {
+    padding: 5px 15px;
+    font-size: 0.85em;
+    background-color: var(--secondary-color);
+}
+
+.toggle-btn:hover {
+    background-color: #2980b9;
+}
+
+.limits-panel {
+    padding: 20px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        overflow: hidden;
+    }
+    to {
+        opacity: 1;
+        max-height: 500px;
+        overflow: visible;
+    }
+}
+
+.limits-panel.hidden {
+    max-height: 0;
+    padding: 0;
+    overflow: hidden;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 1;
+        max-height: 500px;
+    }
+    to {
+        opacity: 0;
+        max-height: 0;
+    }
 }
 
 .limits-group {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 15px;
     margin-bottom: 20px;
+    align-items: flex-end;
 }
 
 .limit-input {
@@ -174,15 +306,35 @@ button:active {
     flex-direction: column;
 }
 
-.region-colors {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
+.limit-input label {
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 0.9em;
 }
 
-.region-colors label {
-    grid-column: 1 / -1;
-    margin-bottom: 10px;
+.limit-input input {
+    padding: 8px 10px;
+}
+
+.region-colors {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f9fafb;
+    border-radius: 6px;
+}
+
+.colors-label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.color-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-bottom: 15px;
 }
 
 .color-input {
@@ -190,26 +342,29 @@ button:active {
     flex-direction: column;
 }
 
-.color-input input[type="color"] {
-    height: 50px;
-    cursor: pointer;
+.color-input label {
+    font-size: 0.9em;
+    margin-bottom: 6px;
 }
 
-.data-display-section {
-    background: white;
-    padding: 25px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+.color-input input[type="color"] {
+    height: 45px;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.color-name {
+    font-size: 0.85em;
+    color: #7f8c8d;
+    margin-top: 4px;
 }
 
 .controls {
-    margin-bottom: 20px;
-    padding-bottom: 15px;
-    border-bottom: 1px solid var(--border-color);
     display: flex;
     flex-wrap: wrap;
-    gap: 15px;
-    align-items: center;
+    gap: 20px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
 }
 
 .controls label {
@@ -218,6 +373,7 @@ button:active {
     margin-bottom: 0;
     font-weight: 500;
     cursor: pointer;
+    font-size: 0.9em;
 }
 
 .controls input[type="checkbox"] {
@@ -225,27 +381,65 @@ button:active {
     width: auto;
     margin-bottom: 0;
     cursor: pointer;
+    accent-color: var(--secondary-color);
+}
+
+.data-display-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.chart-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.last-updated {
+    font-size: 0.9em;
+    color: #7f8c8d;
 }
 
 .charts-container {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-    gap: 30px;
-    margin-bottom: 20px;
+    gap: 25px;
+}
+
+.welcome-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    color: #7f8c8d;
+}
+
+.welcome-message p {
+    font-size: 1.1em;
+    margin: 10px 0;
 }
 
 .chart-wrapper {
     background: #f9fafb;
-    padding: 20px;
+    padding: 15px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
     position: relative;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .chart-wrapper h4 {
-    margin-bottom: 15px;
+    margin-bottom: 12px;
     color: var(--primary-color);
-    font-size: 1.1em;
+    font-size: 1em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .chart-canvas {
@@ -264,14 +458,15 @@ footer {
     text-align: center;
     color: #555;
     margin-top: 30px;
-    font-size: 0.95em;
+    font-size: 0.9em;
 }
 
 .loading {
     text-align: center;
-    padding: 20px;
+    padding: 40px 20px;
     color: var(--secondary-color);
     font-weight: 600;
+    font-size: 1.1em;
 }
 
 .error {
@@ -298,11 +493,51 @@ footer {
     }
 
     header h1 {
-        font-size: 1.8em;
+        font-size: 1.5em;
+    }
+
+    .header-content {
+        flex-direction: column;
+    }
+
+    .selection-section {
+        grid-template-columns: 1fr;
     }
 
     .limits-group,
-    .region-colors {
+    .color-inputs {
         grid-template-columns: 1fr;
+    }
+
+    .chart-controls {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+    }
+
+    header {
+        padding: 15px;
+    }
+
+    header h1 {
+        font-size: 1.3em;
+    }
+
+    .selection-section {
+        padding: 15px;
+        gap: 10px;
+    }
+
+    .limits-panel {
+        padding: 15px;
+    }
+
+    .data-display-section {
+        padding: 15px;
     }
 }

@@ -2,97 +2,237 @@
 let db = null;
 let chartsMap = {};
 let currentData = {};
+let deviceList = [];
+let selectedDevice = null;
+let selectedDate = null;
 let limits = {
-    upper: 100,
-    lower: 0
+    upper: 75,
+    lower: 25
 };
 
-// Initialize Firebase
-function initializeFirebase() {
-    const configText = document.getElementById('firebase-config').value;
-    const statusElement = document.getElementById('connection-status');
-    
+// Connection status tracking
+let connectionStatus = {
+    connected: false,
+    lastUpdate: null,
+    attemptCount: 0,
+    maxRetries: 3
+};
+
+// Initialize Firebase and auto-connect
+window.addEventListener('DOMContentLoaded', () => {
+    initializeFirebaseAuto();
+    setDefaultDate();
+});
+
+// Auto-initialize Firebase
+function initializeFirebaseAuto() {
     try {
-        const config = JSON.parse(configText);
-        
-        // Initialize Firebase with the provided config
-        const app = firebase.initializeApp(config);
-        db = firebase.database(app);
-        
-        statusElement.textContent = 'Connected';
-        statusElement.classList.add('connected');
-        statusElement.classList.remove('disconnected');
-        showMessage('Connected to Firebase successfully!', 'success');
+        // Check if firebaseConfig is available
+        if (typeof firebaseConfig === 'undefined') {
+            updateConnectionStatus(false, 'Firebase config not found');
+            return;
+        }
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        db = firebase.database();
+        updateConnectionStatus(true, 'Connecting...');
+
+        // Test connection and load device list
+        db.ref().once('value', () => {
+            updateConnectionStatus(true, 'Connected');
+            loadDeviceList();
+        }).catch(error => {
+            updateConnectionStatus(false, 'Connection failed');
+            console.error('Firebase connection error:', error);
+        });
+
     } catch (error) {
-        statusElement.textContent = 'Connection Failed';
-        statusElement.classList.add('disconnected');
-        statusElement.classList.remove('connected');
-        showMessage('Error connecting to Firebase: ' + error.message, 'error');
+        updateConnectionStatus(false, 'Initialization error');
+        console.error('Firebase initialization error:', error);
     }
 }
 
-// Load device data
-function loadDeviceData() {
+// Update connection status indicator
+function updateConnectionStatus(connected, message) {
+    const statusDot = document.getElementById('status-dot');
+    const connectionText = document.getElementById('connection-text');
+    const connectionTime = document.getElementById('connection-time');
+
+    connectionStatus.connected = connected;
+    connectionStatus.lastUpdate = new Date();
+
+    if (connected) {
+        statusDot.classList.remove('connecting', 'error');
+        statusDot.classList.add('connected');
+        connectionText.textContent = message;
+        connectionTime.textContent = `(${connectionStatus.lastUpdate.toLocaleTimeString()})`;
+    } else {
+        statusDot.classList.remove('connected');
+        if (message === 'Connecting...') {
+            statusDot.classList.add('connecting');
+        } else {
+            statusDot.classList.add('error');
+        }
+        connectionText.textContent = message;
+        connectionTime.textContent = `(${connectionStatus.lastUpdate.toLocaleTimeString()})`;
+    }
+}
+
+// Load device list from Firebase
+function loadDeviceList() {
     if (!db) {
-        showMessage('Please connect to Firebase first', 'error');
+        showMessage('Not connected to Firebase', 'error');
         return;
     }
-    
-    const deviceId = document.getElementById('device-id').value;
-    if (!deviceId) {
-        showMessage('Please enter a Device ID', 'error');
-        return;
-    }
-    
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    
-    const path = `Devices/${deviceId}/historical_data/${year}/${month}/${day}`;
-    loadDataFromPath(path);
+
+    db.ref('Devices').once('value', (snapshot) => {
+        if (snapshot.exists()) {
+            deviceList = Object.keys(snapshot.val());
+            populateDeviceSelect();
+            showMessage(`Loaded ${deviceList.length} device(s)`, 'success');
+        } else {
+            showMessage('No devices found in database', 'error');
+        }
+    }).catch(error => {
+        console.error('Error loading device list:', error);
+        showMessage('Error loading device list: ' + error.message, 'error');
+    });
 }
 
-// Load data for specific date
-function loadDataForDate() {
-    if (!db) {
-        showMessage('Please connect to Firebase first', 'error');
-        return;
+// Populate device dropdown
+function populateDeviceSelect() {
+    const select = document.getElementById('device-select');
+    select.innerHTML = '<option value="">Select a device...</option>';
+
+    deviceList.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device;
+        option.textContent = device;
+        select.appendChild(option);
+    });
+
+    if (deviceList.length > 0) {
+        select.value = deviceList[0];
+        onDeviceChange();
     }
-    
-    const deviceId = document.getElementById('device-id').value;
-    const datePicker = document.getElementById('date-picker').value;
-    
-    if (!deviceId) {
-        showMessage('Please enter a Device ID', 'error');
-        return;
-    }
-    
-    if (!datePicker) {
-        showMessage('Please select a date', 'error');
-        return;
-    }
-    
-    const [year, month, day] = datePicker.split('-');
-    const path = `Devices/${deviceId}/historical_data/${year}/${month}/${day}`;
-    loadDataFromPath(path);
 }
 
-// Generic function to load data from a path
-function loadDataFromPath(path) {
+// Handle device selection change
+function onDeviceChange() {
+    selectedDevice = document.getElementById('device-select').value;
+
+    if (!selectedDevice) {
+        document.getElementById('date-select').innerHTML = '<option value="">Select a device first</option>';
+        document.getElementById('load-button').disabled = true;
+        return;
+    }
+
+    loadAvailableDates();
+}
+
+// Load available dates for selected device
+function loadAvailableDates() {
+    if (!db || !selectedDevice) {
+        showMessage('Please select a device', 'error');
+        return;
+    }
+
+    const dateSelect = document.getElementById('date-select');
+    dateSelect.innerHTML = '<option value="">Loading dates...</option>';
+
+    db.ref(`Devices/${selectedDevice}/historical_data`).once('value', (snapshot) => {
+        if (snapshot.exists()) {
+            const yearData = snapshot.val();
+            const dates = [];
+
+            // Extract all dates in YYYY-MM-DD format
+            Object.keys(yearData).forEach(year => {
+                Object.keys(yearData[year]).forEach(month => {
+                    Object.keys(yearData[year][month]).forEach(day => {
+                        dates.push(`${year}-${month}-${day}`);
+                    });
+                });
+            });
+
+            // Sort dates in descending order (latest first)
+            dates.sort().reverse();
+
+            populateDateSelect(dates);
+
+            if (dates.length > 0) {
+                document.getElementById('load-button').disabled = false;
+                selectedDate = dates[0];
+                document.getElementById('date-select').value = selectedDate;
+                showMessage(`Found ${dates.length} date(s) with data`, 'success');
+                // Auto-load latest date
+                loadDataForSelection();
+            } else {
+                showMessage('No dates available for this device', 'error');
+                document.getElementById('load-button').disabled = true;
+            }
+        } else {
+            showMessage('No historical data found for this device', 'error');
+            dateSelect.innerHTML = '<option value="">No data available</option>';
+            document.getElementById('load-button').disabled = true;
+        }
+    }).catch(error => {
+        console.error('Error loading dates:', error);
+        showMessage('Error loading dates: ' + error.message, 'error');
+    });
+}
+
+// Populate date dropdown
+function populateDateSelect(dates) {
+    const select = document.getElementById('date-select');
+    select.innerHTML = '<option value="">Select a date...</option>';
+
+    dates.forEach(date => {
+        const option = document.createElement('option');
+        option.value = date;
+        option.textContent = date;
+        select.appendChild(option);
+    });
+}
+
+// Handle date selection change
+function onDateChange() {
+    selectedDate = document.getElementById('date-select').value;
+}
+
+// Load data for selected device and date
+function loadDataForSelection() {
+    if (!selectedDevice || !selectedDate) {
+        showMessage('Please select both device and date', 'error');
+        return;
+    }
+
+    const [year, month, day] = selectedDate.split('-');
+    const path = `Devices/${selectedDevice}/historical_data/${year}/${month}/${day}`;
+
     const chartsContainer = document.getElementById('charts-container');
     chartsContainer.innerHTML = '<div class="loading">Loading data...</div>';
-    
-    db.ref(path).on('value', (snapshot) => {
+
+    db.ref(path).once('value', (snapshot) => {
         if (snapshot.exists()) {
             const hourlyData = snapshot.val();
             processAndDisplayData(hourlyData);
+            updateLastUpdated();
         } else {
-            chartsContainer.innerHTML = '<div class="error">No data found for the specified path.</div>';
+            chartsContainer.innerHTML = '<div class="error">No data found for the specified date.</div>';
         }
-    }, (error) => {
+    }).catch(error => {
         chartsContainer.innerHTML = `<div class="error">Error loading data: ${error.message}</div>`;
     });
+}
+
+// Update last updated timestamp
+function updateLastUpdated() {
+    const now = new Date();
+    document.getElementById('last-updated').textContent = 
+        `Last updated: ${now.toLocaleTimeString()}`;
 }
 
 // Process data and create charts
@@ -101,29 +241,29 @@ function processAndDisplayData(hourlyData) {
     chartsContainer.innerHTML = '';
     chartsMap = {};
     currentData = {};
-    
-    // Group data by hour and collect all data points
+
+    // Group data by hour
     const dataByHour = {};
-    
+
     Object.entries(hourlyData).forEach(([hour, hourData]) => {
         if (typeof hourData === 'object') {
             dataByHour[hour] = hourData;
         }
     });
-    
+
     // Create charts for each data point (data01-data10)
     for (let i = 1; i <= 10; i++) {
         const dataKey = `data${String(i).padStart(2, '0')}`;
         const chartData = extractDataForKey(dataByHour, dataKey);
-        
+
         if (chartData && chartData.timestamps.length > 0) {
             createChart(chartsContainer, dataKey, chartData);
             currentData[dataKey] = chartData;
         }
     }
-    
+
     if (Object.keys(chartsMap).length === 0) {
-        chartsContainer.innerHTML = '<div class="error">No valid data points found. Expected data01-data10 keys in the database.</div>';
+        chartsContainer.innerHTML = '<div class="error">No valid data points found (data01-data10).</div>';
     }
 }
 
@@ -132,7 +272,7 @@ function extractDataForKey(dataByHour, dataKey) {
     const timestamps = [];
     const values = [];
     const sortedHours = Object.keys(dataByHour).sort();
-    
+
     sortedHours.forEach((hour) => {
         const hourData = dataByHour[hour];
         if (hourData && hourData[dataKey] !== undefined) {
@@ -140,7 +280,7 @@ function extractDataForKey(dataByHour, dataKey) {
             values.push(parseFloat(hourData[dataKey]));
         }
     });
-    
+
     return {
         timestamps,
         values,
@@ -152,20 +292,20 @@ function extractDataForKey(dataByHour, dataKey) {
 function createChart(container, dataKey, chartData) {
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper';
-    
+
     const title = document.createElement('h4');
     title.textContent = dataKey.toUpperCase();
     wrapper.appendChild(title);
-    
+
     const canvasDiv = document.createElement('div');
     canvasDiv.className = 'chart-canvas';
-    
+
     const canvas = document.createElement('canvas');
     canvasDiv.appendChild(canvas);
     wrapper.appendChild(canvasDiv);
     container.appendChild(wrapper);
-    
-    // Prepare chart data with colored regions based on limits
+
+    // Prepare chart data
     const chartConfig = {
         type: 'line',
         data: {
@@ -252,15 +392,10 @@ function createChart(container, dataKey, chartData) {
             }
         }
     };
-    
-    // Add background color plugin
-    if (chartConfig.options.plugins === undefined) {
-        chartConfig.options.plugins = {};
-    }
-    
+
     const chart = new Chart(canvas, chartConfig);
     chartsMap[dataKey] = { chart, canvas, wrapper };
-    
+
     // Add limit lines and background regions
     updateLimitLines(dataKey);
 }
@@ -269,25 +404,25 @@ function createChart(container, dataKey, chartData) {
 function updateLimits() {
     const upperLimit = parseFloat(document.getElementById('upper-limit').value);
     const lowerLimit = parseFloat(document.getElementById('lower-limit').value);
-    
+
     if (isNaN(upperLimit) || isNaN(lowerLimit)) {
         showMessage('Please enter valid limit values', 'error');
         return;
     }
-    
+
     if (lowerLimit >= upperLimit) {
         showMessage('Lower limit must be less than upper limit', 'error');
         return;
     }
-    
+
     limits.upper = upperLimit;
     limits.lower = lowerLimit;
-    
+
     updateCharts();
-    showMessage('Limits updated successfully!', 'success');
+    showMessage(`Limits updated: ${lowerLimit} - ${upperLimit}`, 'success');
 }
 
-// Update all charts with new limits and settings
+// Update all charts
 function updateCharts() {
     Object.keys(chartsMap).forEach(dataKey => {
         updateLimitLines(dataKey);
@@ -297,14 +432,14 @@ function updateCharts() {
 // Update limit lines and background for a specific chart
 function updateLimitLines(dataKey) {
     if (!chartsMap[dataKey]) return;
-    
+
     const chart = chartsMap[dataKey].chart;
     const showLimits = document.getElementById('show-limits').checked;
     const showBackground = document.getElementById('show-background').checked;
-    
+
     // Remove existing limit datasets
-    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit') && !ds.label.includes('Region'));
-    
+    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));
+
     if (showLimits) {
         // Add upper limit line
         chart.data.datasets.push({
@@ -318,7 +453,7 @@ function updateLimitLines(dataKey) {
             pointHoverRadius: 0,
             tension: 0
         });
-        
+
         // Add lower limit line
         chart.data.datasets.push({
             label: 'Lower Limit',
@@ -332,57 +467,58 @@ function updateLimitLines(dataKey) {
             tension: 0
         });
     }
-    
-    // Update chart with background regions if needed
+
+    // Add background plugin for regions
     if (showBackground) {
         addBackgroundRegions(chart);
     }
-    
+
     chart.update();
 }
 
 // Add background color regions
 function addBackgroundRegions(chart) {
+    const canvas = chart.canvas;
     const ctx = chart.ctx;
-    const yScale = chart.scales.y;
-    const xScale = chart.scales.x;
-    
-    if (!yScale || !xScale) return;
-    
+
+    // Store reference for cleanup
+    if (!canvas._originalDraw) {
+        canvas._originalDraw = Chart.controllers.line.prototype.draw;
+    }
+
     const aboveColor = document.getElementById('above-color').value;
     const normalColor = document.getElementById('normal-color').value;
     const belowColor = document.getElementById('below-color').value;
-    
-    // Store original draw function
-    const originalDraw = Chart.controllers.line.prototype.draw;
-    
+
+    const originalDraw = canvas._originalDraw;
+
     Chart.controllers.line.prototype.draw = function (relRenderIndex, relRenderInfo) {
         originalDraw.call(this, relRenderIndex, relRenderInfo);
-        
+
         const yScale = this.chart.scales.y;
         const xScale = this.chart.scales.x;
         const chartArea = this.chart.chartArea;
-        
+
         if (!yScale || !xScale) return;
-        
+
         ctx.save();
-        
+
         // Draw background regions
         const upperPixel = yScale.getPixelForValue(limits.upper);
         const lowerPixel = yScale.getPixelForValue(limits.lower);
-        
+
         // Above upper limit
-        ctx.fillStyle = hexToRgba(aboveColor, 0.1);
+        ctx.fillStyle = hexToRgba(aboveColor, 0.15);
         ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, upperPixel - chartArea.top);
-        
+
         // Between limits (normal)
-        ctx.fillStyle = hexToRgba(normalColor, 0.1);
+        ctx.fillStyle = hexToRgba(normalColor, 0.15);
         ctx.fillRect(chartArea.left, upperPixel, chartArea.width, lowerPixel - upperPixel);
-        
+
         // Below lower limit
-        ctx.fillStyle = hexToRgba(belowColor, 0.1);
+        ctx.fillStyle = hexToRgba(belowColor, 0.15);
         ctx.fillRect(chartArea.left, lowerPixel, chartArea.width, chartArea.bottom - lowerPixel);
-        
+
         ctx.restore();
     };
 }
@@ -402,25 +538,39 @@ function resetZoom() {
     });
 }
 
-// Show message to user
-function showMessage(message, type) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = type === 'error' ? 'error' : 'success';
-    messageDiv.textContent = message;
+// Toggle limits panel visibility
+function toggleLimitsPanel() {
+    const panel = document.getElementById('limits-panel');
+    const button = document.querySelector('.toggle-btn');
     
-    const container = document.querySelector('.container');
-    container.insertBefore(messageDiv, container.firstChild);
-    
-    setTimeout(() => {
-        messageDiv.remove();
-    }, 5000);
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        button.textContent = 'Hide';
+    } else {
+        panel.classList.add('hidden');
+        button.textContent = 'Show';
+    }
 }
 
-// Set today's date as default in date picker
-window.addEventListener('DOMContentLoaded', () => {
+// Set default date to today
+function setDefaultDate() {
     const today = new Date();
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
     const day = String(today.getDate()).padStart(2, '0');
     document.getElementById('date-picker').value = `${year}-${month}-${day}`;
-});
+}
+
+// Show message to user
+function showMessage(message, type) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = type === 'error' ? 'error' : 'success';
+    messageDiv.textContent = message;
+
+    const container = document.querySelector('.container');
+    container.insertBefore(messageDiv, container.firstChild);
+
+    setTimeout(() => {
+        messageDiv.remove();
+    }, 5000);
+}
