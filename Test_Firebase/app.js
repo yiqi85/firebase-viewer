@@ -314,4 +314,161 @@ function updateLastUpdated() {
     const now = new Date();
     const element = document.getElementById('last-updated');
     if (element) {
-        element.textContent = `Last updated: ${now.toLocaleTimeString()}`;\n    }\n}\n\n// Process data and create charts\nfunction processAndDisplayData(hourlyData) {\n    const chartsContainer = document.getElementById('charts-container');\n    if (!chartsContainer) return;\n\n    chartsContainer.innerHTML = '';\n    chartsMap = {};\n    currentData = {};\n\n    // Group data by hour\n    const dataByHour = {};\n\n    Object.entries(hourlyData).forEach(([hour, hourData]) => {\n        if (typeof hourData === 'object') {\n            dataByHour[hour] = hourData;\n        }\n    });\n\n    // Create charts for each data point (data01-data10)\n    for (let i = 1; i <= 10; i++) {\n        const dataKey = `data${String(i).padStart(2, '0')}`;\n        const chartData = extractDataForKey(dataByHour, dataKey);\n\n        if (chartData && chartData.timestamps.length > 0) {\n            createChart(chartsContainer, dataKey, chartData);\n            currentData[dataKey] = chartData;\n        }\n    }\n\n    if (Object.keys(chartsMap).length === 0) {\n        chartsContainer.innerHTML = '<div class=\"error\">No valid data points found (data01-data10).</div>';\n    } else {\n        console.log(`Created ${Object.keys(chartsMap).length} charts`);\n    }\n}\n\n// Extract data for a specific key from hourly data\nfunction extractDataForKey(dataByHour, dataKey) {\n    const timestamps = [];\n    const values = [];\n    const sortedHours = Object.keys(dataByHour).sort();\n\n    sortedHours.forEach((hour) => {\n        const hourData = dataByHour[hour];\n        if (hourData && hourData[dataKey] !== undefined) {\n            timestamps.push(hour);\n            values.push(parseFloat(hourData[dataKey]));\n        }\n    });\n\n    return {\n        timestamps,\n        values,\n        dataKey\n    };\n}\n\n// Create a chart for a data key\nfunction createChart(container, dataKey, chartData) {\n    const wrapper = document.createElement('div');\n    wrapper.className = 'chart-wrapper';\n\n    const title = document.createElement('h4');\n    title.textContent = dataKey.toUpperCase();\n    wrapper.appendChild(title);\n\n    const canvasDiv = document.createElement('div');\n    canvasDiv.className = 'chart-canvas';\n\n    const canvas = document.createElement('canvas');\n    canvasDiv.appendChild(canvas);\n    wrapper.appendChild(canvasDiv);\n    container.appendChild(wrapper);\n\n    // Prepare chart data\n    const chartConfig = {\n        type: 'line',\n        data: {\n            labels: chartData.timestamps,\n            datasets: [\n                {\n                    label: dataKey.toUpperCase(),\n                    data: chartData.values,\n                    borderColor: '#3498db',\n                    backgroundColor: 'rgba(52, 152, 219, 0.1)',\n                    borderWidth: 2,\n                    tension: 0.4,\n                    fill: false,\n                    pointRadius: 4,\n                    pointBackgroundColor: '#3498db',\n                    pointBorderColor: '#fff',\n                    pointBorderWidth: 2,\n                    pointHoverRadius: 6\n                }\n            ]\n        },\n        options: {\n            responsive: true,\n            maintainAspectRatio: false,\n            interaction: {\n                mode: 'index',\n                intersect: false\n            },\n            plugins: {\n                zoom: {\n                    zoom: {\n                        wheel: {\n                            enabled: true,\n                            speed: 0.1\n                        },\n                        pinch: {\n                            enabled: true\n                        },\n                        mode: 'xy'\n                    },\n                    pan: {\n                        enabled: true,\n                        mode: 'xy',\n                        modifierKey: 'ctrl'\n                    },\n                    limits: {\n                        x: { min: 'original', max: 'original' },\n                        y: { min: 'original', max: 'original' }\n                    }\n                },\n                legend: {\n                    display: true,\n                    position: 'top'\n                },\n                tooltip: {\n                    backgroundColor: 'rgba(0, 0, 0, 0.8)',\n                    padding: 12,\n                    titleFont: { size: 14, weight: 'bold' },\n                    bodyFont: { size: 13 },\n                    displayColors: true,\n                    borderColor: '#ccc',\n                    borderWidth: 1\n                }\n            },\n            scales: {\n                x: {\n                    display: true,\n                    title: {\n                        display: true,\n                        text: 'Time (HH:MM)'\n                    },\n                    ticks: {\n                        maxRotation: 45,\n                        minRotation: 0\n                    }\n                },\n                y: {\n                    display: true,\n                    title: {\n                        display: true,\n                        text: 'Value'\n                    }\n                }\n            }\n        }\n    };\n\n    const chart = new Chart(canvas, chartConfig);\n    chartsMap[dataKey] = { chart, canvas, wrapper };\n\n    // Add limit lines and background regions\n    updateLimitLines(dataKey);\n}\n\n// Update limits\nfunction updateLimits() {\n    const upperLimit = parseFloat(document.getElementById('upper-limit').value);\n    const lowerLimit = parseFloat(document.getElementById('lower-limit').value);\n\n    if (isNaN(upperLimit) || isNaN(lowerLimit)) {\n        showMessage('Please enter valid limit values', 'error');\n        return;\n    }\n\n    if (lowerLimit >= upperLimit) {\n        showMessage('Lower limit must be less than upper limit', 'error');\n        return;\n    }\n\n    limits.upper = upperLimit;\n    limits.lower = lowerLimit;\n\n    updateCharts();\n    showMessage(`✓ Limits updated: ${lowerLimit} - ${upperLimit}`, 'success');\n}\n\n// Update all charts\nfunction updateCharts() {\n    Object.keys(chartsMap).forEach(dataKey => {\n        updateLimitLines(dataKey);\n    });\n}\n\n// Update limit lines and background for a specific chart\nfunction updateLimitLines(dataKey) {\n    if (!chartsMap[dataKey]) return;\n\n    const chart = chartsMap[dataKey].chart;\n    const showLimits = document.getElementById('show-limits');\n    const showBackground = document.getElementById('show-background');\n\n    if (!showLimits || !showBackground) return;\n\n    // Remove existing limit datasets\n    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));\n\n    if (showLimits.checked) {\n        // Add upper limit line\n        chart.data.datasets.push({\n            label: 'Upper Limit',\n            data: Array(chart.data.labels.length).fill(limits.upper),\n            borderColor: '#e74c3c',\n            borderDash: [5, 5],\n            borderWidth: 2,\n            fill: false,\n            pointRadius: 0,\n            pointHoverRadius: 0,\n            tension: 0\n        });\n\n        // Add lower limit line\n        chart.data.datasets.push({\n            label: 'Lower Limit',\n            data: Array(chart.data.labels.length).fill(limits.lower),\n            borderColor: '#3498db',\n            borderDash: [5, 5],\n            borderWidth: 2,\n            fill: false,\n            pointRadius: 0,\n            pointHoverRadius: 0,\n            tension: 0\n        });\n    }\n\n    // Add background plugin for regions\n    if (showBackground.checked) {\n        addBackgroundRegions(chart);\n    }\n\n    chart.update();\n}\n\n// Add background color regions\nfunction addBackgroundRegions(chart) {\n    const canvas = chart.canvas;\n    const ctx = chart.ctx;\n\n    // Store reference for cleanup\n    if (!canvas._originalDraw) {\n        canvas._originalDraw = Chart.controllers.line.prototype.draw;\n    }\n\n    const aboveColor = document.getElementById('above-color');\n    const normalColor = document.getElementById('normal-color');\n    const belowColor = document.getElementById('below-color');\n\n    if (!aboveColor || !normalColor || !belowColor) return;\n\n    const originalDraw = canvas._originalDraw;\n\n    Chart.controllers.line.prototype.draw = function (relRenderIndex, relRenderInfo) {\n        originalDraw.call(this, relRenderIndex, relRenderInfo);\n\n        const yScale = this.chart.scales.y;\n        const xScale = this.chart.scales.x;\n        const chartArea = this.chart.chartArea;\n\n        if (!yScale || !xScale) return;\n\n        ctx.save();\n\n        // Draw background regions\n        const upperPixel = yScale.getPixelForValue(limits.upper);\n        const lowerPixel = yScale.getPixelForValue(limits.lower);\n\n        // Above upper limit\n        ctx.fillStyle = hexToRgba(aboveColor.value, 0.15);\n        ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, upperPixel - chartArea.top);\n\n        // Between limits (normal)\n        ctx.fillStyle = hexToRgba(normalColor.value, 0.15);\n        ctx.fillRect(chartArea.left, upperPixel, chartArea.width, lowerPixel - upperPixel);\n\n        // Below lower limit\n        ctx.fillStyle = hexToRgba(belowColor.value, 0.15);\n        ctx.fillRect(chartArea.left, lowerPixel, chartArea.width, chartArea.bottom - lowerPixel);\n\n        ctx.restore();\n    };\n}\n\n// Convert hex color to rgba\nfunction hexToRgba(hex, alpha) {\n    const r = parseInt(hex.slice(1, 3), 16);\n    const g = parseInt(hex.slice(3, 5), 16);\n    const b = parseInt(hex.slice(5, 7), 16);\n    return `rgba(${r}, ${g}, ${b}, ${alpha})`;\n}\n\n// Reset zoom on all charts\nfunction resetZoom() {\n    Object.values(chartsMap).forEach(({ chart }) => {\n        chart.resetZoom();\n    });\n}\n\n// Toggle limits panel visibility\nfunction toggleLimitsPanel() {\n    const panel = document.getElementById('limits-panel');\n    const button = document.querySelector('.toggle-btn');\n    \n    if (panel && button) {\n        if (panel.classList.contains('hidden')) {\n            panel.classList.remove('hidden');\n            button.textContent = 'Hide';\n        } else {\n            panel.classList.add('hidden');\n            button.textContent = 'Show';\n        }\n    }\n}\n\n// Show message to user\nfunction showMessage(message, type) {\n    const messageDiv = document.createElement('div');\n    messageDiv.className = type === 'error' ? 'error' : 'success';\n    messageDiv.textContent = message;\n\n    const container = document.querySelector('.container');\n    if (container) {\n        container.insertBefore(messageDiv, container.firstChild);\n\n        setTimeout(() => {\n            messageDiv.remove();\n        }, 6000);\n    }\n}\n\nconsole.log('App.js loaded successfully');
+        element.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+    }
+}
+
+// Process data and create charts
+function processAndDisplayData(hourlyData) {
+    const chartsContainer = document.getElementById('charts-container');
+    if (!chartsContainer) return;
+        
+    chartsContainer.innerHTML = '';
+    chartsMap = {};
+    currentData = {};
+    
+    // Group data by hour
+    const dataByHour = {};
+    
+    Object.entries(hourlyData).forEach(([hour, hourData]) => {
+        if (typeof hourData === 'object') {
+            dataByHour[hour] = hourData;
+        }
+    });
+    
+    // Create charts for each data point (data01-data10)
+    for (let i = 1; i <= 10; i++) {
+        const dataKey = `data${String(i).padStart(2, '0')}`;
+        const chartData = extractDataForKey(dataByHour, dataKey);
+        
+        if (chartData && chartData.timestamps.length > 0) {
+            createChart(chartsContainer, dataKey, chartData);
+            currentData[dataKey] = chartData;
+        }
+    }
+    
+    if (Object.keys(chartsMap).length === 0) {
+        chartsContainer.innerHTML = '<div class=\"error\">No valid data points found (data01-data10).</div>';
+    } else {
+        console.log(`Created ${Object.keys(chartsMap).length} charts`);
+    }
+}
+
+// Extract data for a specific key from hourly data
+function extractDataForKey(dataByHour, dataKey) {
+    const timestamps = [];
+    const values = [];
+    const sortedHours = Object.keys(dataByHour).sort();
+    
+    sortedHours.forEach((hour) => {
+        const hourData = dataByHour[hour];
+        if (hourData && hourData[dataKey] !== undefined) {
+            timestamps.push(hour);
+            values.push(parseFloat(hourData[dataKey]));
+        }
+    });
+    
+    return {
+        timestamps,
+        values,
+        dataKey
+    };
+}
+
+// Create a chart for a data key
+function createChart(container, dataKey, chartData) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chart-wrapper';
+    
+    const title = document.createElement('h4');
+    title.textContent = dataKey.toUpperCase();
+    wrapper.appendChild(title);
+    
+    const canvasDiv = document.createElement('div');
+    canvasDiv.className = 'chart-canvas';
+    
+    const canvas = document.createElement('canvas');
+    canvasDiv.appendChild(canvas);
+    wrapper.appendChild(canvasDiv);
+    container.appendChild(wrapper);
+    
+    // Prepare chart data
+    const chartConfig = {
+        type: 'line',
+        data: {
+            labels: chartData.timestamps,
+            datasets: [
+                {
+                    label: dataKey.toUpperCase(),
+                    data: chartData.values,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#3498db',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                zoom: {
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                            speed: 0.1
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        mode: 'xy'
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'xy',
+                        modifierKey: 'ctrl'
+                        },
+                    limits: {
+                        x: { min: 'original', max: 'original' },
+                        y: { min: 'original', max: 'original' }
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    titleFont: { size: 14, weight: 'bold' },
+                    bodyFont: { size: 13 },
+                    displayColors: true,
+                    borderColor: '#ccc',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Time (HH:MM)'
+                    },
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 0
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {\n                        display: true,\n                        text: 'Value'\n                    }\n                }\n            }\n        }\n    };\n\n    const chart = new Chart(canvas, chartConfig);\n    chartsMap[dataKey] = { chart, canvas, wrapper };\n\n    // Add limit lines and background regions\n    updateLimitLines(dataKey);\n}\n\n// Update limits\nfunction updateLimits() {\n    const upperLimit = parseFloat(document.getElementById('upper-limit').value);\n    const lowerLimit = parseFloat(document.getElementById('lower-limit').value);\n\n    if (isNaN(upperLimit) || isNaN(lowerLimit)) {\n        showMessage('Please enter valid limit values', 'error');\n        return;\n    }\n\n    if (lowerLimit >= upperLimit) {\n        showMessage('Lower limit must be less than upper limit', 'error');\n        return;\n    }\n\n    limits.upper = upperLimit;\n    limits.lower = lowerLimit;\n\n    updateCharts();\n    showMessage(`✓ Limits updated: ${lowerLimit} - ${upperLimit}`, 'success');\n}\n\n// Update all charts\nfunction updateCharts() {\n    Object.keys(chartsMap).forEach(dataKey => {\n        updateLimitLines(dataKey);\n    });\n}\n\n// Update limit lines and background for a specific chart\nfunction updateLimitLines(dataKey) {\n    if (!chartsMap[dataKey]) return;\n\n    const chart = chartsMap[dataKey].chart;\n    const showLimits = document.getElementById('show-limits');\n    const showBackground = document.getElementById('show-background');\n\n    if (!showLimits || !showBackground) return;\n\n    // Remove existing limit datasets\n    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));\n\n    if (showLimits.checked) {\n        // Add upper limit line\n        chart.data.datasets.push({\n            label: 'Upper Limit',\n            data: Array(chart.data.labels.length).fill(limits.upper),\n            borderColor: '#e74c3c',\n            borderDash: [5, 5],\n            borderWidth: 2,\n            fill: false,\n            pointRadius: 0,\n            pointHoverRadius: 0,\n            tension: 0\n        });\n\n        // Add lower limit line\n        chart.data.datasets.push({\n            label: 'Lower Limit',\n            data: Array(chart.data.labels.length).fill(limits.lower),\n            borderColor: '#3498db',\n            borderDash: [5, 5],\n            borderWidth: 2,\n            fill: false,\n            pointRadius: 0,\n            pointHoverRadius: 0,\n            tension: 0\n        });\n    }\n\n    // Add background plugin for regions\n    if (showBackground.checked) {\n        addBackgroundRegions(chart);\n    }\n\n    chart.update();\n}\n\n// Add background color regions\nfunction addBackgroundRegions(chart) {\n    const canvas = chart.canvas;\n    const ctx = chart.ctx;\n\n    // Store reference for cleanup\n    if (!canvas._originalDraw) {\n        canvas._originalDraw = Chart.controllers.line.prototype.draw;\n    }\n\n    const aboveColor = document.getElementById('above-color');\n    const normalColor = document.getElementById('normal-color');\n    const belowColor = document.getElementById('below-color');\n\n    if (!aboveColor || !normalColor || !belowColor) return;\n\n    const originalDraw = canvas._originalDraw;\n\n    Chart.controllers.line.prototype.draw = function (relRenderIndex, relRenderInfo) {\n        originalDraw.call(this, relRenderIndex, relRenderInfo);\n\n        const yScale = this.chart.scales.y;\n        const xScale = this.chart.scales.x;\n        const chartArea = this.chart.chartArea;\n\n        if (!yScale || !xScale) return;\n\n        ctx.save();\n\n        // Draw background regions\n        const upperPixel = yScale.getPixelForValue(limits.upper);\n        const lowerPixel = yScale.getPixelForValue(limits.lower);\n\n        // Above upper limit\n        ctx.fillStyle = hexToRgba(aboveColor.value, 0.15);\n        ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, upperPixel - chartArea.top);\n\n        // Between limits (normal)\n        ctx.fillStyle = hexToRgba(normalColor.value, 0.15);\n        ctx.fillRect(chartArea.left, upperPixel, chartArea.width, lowerPixel - upperPixel);\n\n        // Below lower limit\n        ctx.fillStyle = hexToRgba(belowColor.value, 0.15);\n        ctx.fillRect(chartArea.left, lowerPixel, chartArea.width, chartArea.bottom - lowerPixel);\n\n        ctx.restore();\n    };\n}\n\n// Convert hex color to rgba\nfunction hexToRgba(hex, alpha) {\n    const r = parseInt(hex.slice(1, 3), 16);\n    const g = parseInt(hex.slice(3, 5), 16);\n    const b = parseInt(hex.slice(5, 7), 16);\n    return `rgba(${r}, ${g}, ${b}, ${alpha})`;\n}\n\n// Reset zoom on all charts\nfunction resetZoom() {\n    Object.values(chartsMap).forEach(({ chart }) => {\n        chart.resetZoom();\n    });\n}\n\n// Toggle limits panel visibility\nfunction toggleLimitsPanel() {\n    const panel = document.getElementById('limits-panel');\n    const button = document.querySelector('.toggle-btn');\n    \n    if (panel && button) {\n        if (panel.classList.contains('hidden')) {\n            panel.classList.remove('hidden');\n            button.textContent = 'Hide';\n        } else {\n            panel.classList.add('hidden');\n            button.textContent = 'Show';\n        }\n    }\n}\n\n// Show message to user\nfunction showMessage(message, type) {\n    const messageDiv = document.createElement('div');\n    messageDiv.className = type === 'error' ? 'error' : 'success';\n    messageDiv.textContent = message;\n\n    const container = document.querySelector('.container');\n    if (container) {\n        container.insertBefore(messageDiv, container.firstChild);\n\n        setTimeout(() => {\n            messageDiv.remove();\n        }, 6000);\n    }\n}\n\nconsole.log('App.js loaded successfully');
