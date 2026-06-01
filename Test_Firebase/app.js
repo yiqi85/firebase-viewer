@@ -29,52 +29,84 @@ function initializeFirebaseAuto() {
         if (typeof firebaseConfig === 'undefined') {
             console.error('Firebase config not found');
             updateConnectionStatus(false, 'Firebase config not found');
+            showMessage('Firebase config not found', 'error');
             return;
         }
 
         console.log('Initializing Firebase...');
         firebase.initializeApp(firebaseConfig);
         db = firebase.database();
+        console.log('Firebase initialized');
         updateConnectionStatus(true, 'Connecting...');
-        console.log('Firebase initialized, attempting to load devices...');
-
-        // Add connection timeout
+        
+        // Test connection by reading root data
         const timeoutId = setTimeout(() => {
             console.warn('Connection timeout - check Firebase database');
             updateConnectionStatus(false, 'Connection timeout');
             showMessage('Connection timeout - Check Firebase permissions and database URL', 'error');
-        }, 8000);
+        }, 10000);
 
-        // Try to load devices
-        db.ref('Devices').once('value')
+        db.ref('/').limitToFirst(1).once('value')
             .then((snapshot) => {
                 clearTimeout(timeoutId);
-                console.log('Device list loaded:', snapshot.exists());
+                console.log('Firebase connection test successful');
+                updateConnectionStatus(true, 'Connected');
                 
-                if (snapshot.exists()) {
-                    deviceList = Object.keys(snapshot.val());
-                    console.log('Devices found:', deviceList);
-                    populateDeviceSelect();
-                    updateConnectionStatus(true, 'Connected');
-                    showMessage(`✓ Connected! Loaded ${deviceList.length} device(s)`, 'success');
-                } else {
-                    console.warn('No devices found in database');
-                    updateConnectionStatus(true, 'Connected (no devices)');
-                    showMessage('No devices found. Check your database structure.', 'error');
-                }
+                // Now load devices
+                loadDevicesList();
             })
             .catch(error => {
                 clearTimeout(timeoutId);
-                console.error('Error loading devices:', error);
+                console.error('Connection test failed:', error);
                 updateConnectionStatus(false, 'Connection failed');
                 showMessage('Error: ' + error.message, 'error');
-                });
+            });
         
     } catch (error) {
         console.error('Firebase initialization error:', error);
         updateConnectionStatus(false, 'Initialization error');
         showMessage('Firebase Error: ' + error.message, 'error');
-        }
+    }
+}
+
+// Load devices list
+function loadDevicesList() {
+    if (!db) {
+        console.error('Database not available');
+        return;
+    }
+
+    console.log('Loading devices list...');
+    const timeoutId = setTimeout(() => {
+        console.warn('Device list loading timeout');
+        updateConnectionStatus(false, 'Device load timeout');
+        showMessage('Timeout loading devices', 'error');
+    }, 10000);
+
+    db.ref('Devices').once('value')
+        .then((snapshot) => {
+            clearTimeout(timeoutId);
+            console.log('Devices snapshot received, exists:', snapshot.exists());
+            
+            if (snapshot.exists()) {
+                deviceList = Object.keys(snapshot.val());
+                console.log('Devices found:', deviceList);
+                populateDeviceSelect();
+                updateConnectionStatus(true, 'Connected');
+                showMessage(`✓ Connected! Loaded ${deviceList.length} device(s)`, 'success');
+            } else {
+                console.warn('No devices found in database');
+                updateConnectionStatus(true, 'Connected (no devices)');
+                showMessage('No devices found. Check your database structure.', 'error');
+                populateDeviceSelect([]); // Show empty dropdown
+            }
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            console.error('Error loading devices:', error);
+            updateConnectionStatus(false, 'Failed to load devices');
+            showMessage('Error: ' + error.message, 'error');
+        });
 }
 
 // Update connection status indicator
@@ -99,37 +131,40 @@ function updateConnectionStatus(connected, message) {
         connectionTime.textContent = `(${connectionStatus.lastUpdate.toLocaleTimeString()})`;
     } else {
         statusDot.classList.remove('connected');
-        if (message.includes('Connecting')) {
-            statusDot.classList.add('connecting');
-        } else {
-            statusDot.classList.add('error');\n        }
+        statusDot.classList.add('error');
         connectionText.textContent = message;
         connectionTime.textContent = `(${connectionStatus.lastUpdate.toLocaleTimeString()})`;
     }
 }
 
 // Populate device dropdown
-function populateDeviceSelect() {
+function populateDeviceSelect(devices = null) {
     const select = document.getElementById('device-select');
     if (!select) {
         console.error('device-select element not found');
         return;
     }
     
-    select.innerHTML = '<option value=\"\">Select a device...</option>';
+    const devList = devices !== null ? devices : deviceList;
+    select.innerHTML = '<option value="">Select a device...</option>';
     
-    deviceList.forEach(device => {
+    if (devList.length === 0) {
+        console.log('No devices to populate');
+        return;
+    }
+    
+    devList.forEach(device => {
         const option = document.createElement('option');
         option.value = device;
         option.textContent = device;
         select.appendChild(option);
     });
     
-    if (deviceList.length > 0) {
-        console.log('Auto-selecting first device:', deviceList[0]);
-        select.value = deviceList[0];
+    if (devList.length > 0) {
+        console.log('Auto-selecting first device:', devList[0]);
+        select.value = devList[0];
         onDeviceChange();
-        }
+    }
 }
 
 // Handle device selection change
@@ -141,7 +176,7 @@ function onDeviceChange() {
     if (!selectedDevice) {
         const dateSelect = document.getElementById('date-select');
         if (dateSelect) {
-            dateSelect.innerHTML = '<option value=\"\">Select a device first</option>';
+            dateSelect.innerHTML = '<option value="">Select a device first</option>';
         }
         const loadButton = document.getElementById('load-button');
         if (loadButton) {
@@ -164,20 +199,20 @@ function loadAvailableDates() {
     const dateSelect = document.getElementById('date-select');
     if (!dateSelect) return;
         
-    dateSelect.innerHTML = '<option value=\"\">Loading dates...</option>';
+    dateSelect.innerHTML = '<option value="">Loading dates...</option>';
     console.log('Loading dates for device:', selectedDevice);
     
     const timeoutId = setTimeout(() => {
         console.warn('Date loading timeout');
-        dateSelect.innerHTML = '<option value=\"\">Failed to load dates</option>';
+        dateSelect.innerHTML = '<option value="">Failed to load dates</option>';
         showMessage('Timeout loading dates', 'error');
-    }, 8000);
+    }, 10000);
     
     db.ref(`Devices/${selectedDevice}/historical_data`)
         .once('value')
         .then((snapshot) => {
             clearTimeout(timeoutId);
-            console.log('Dates loaded:', snapshot.exists());
+            console.log('Dates snapshot received, exists:', snapshot.exists());
             
             if (snapshot.exists()) {
                 const yearData = snapshot.val();
@@ -186,11 +221,15 @@ function loadAvailableDates() {
                 // Extract all dates in YYYY-MM-DD format
                 try {
                     Object.keys(yearData).forEach(year => {
-                        Object.keys(yearData[year]).forEach(month => {
-                            Object.keys(yearData[year][month]).forEach(day => {
-                                dates.push(`${year}-${month}-${day}`);
+                        if (typeof yearData[year] === 'object') {
+                            Object.keys(yearData[year]).forEach(month => {
+                                if (typeof yearData[year][month] === 'object') {
+                                    Object.keys(yearData[year][month]).forEach(day => {
+                                        dates.push(`${year}-${month}-${day}`);
+                                    });
+                                }
                             });
-                        });
+                        }
                     });
                     
                     // Sort dates in descending order (latest first)
@@ -206,9 +245,7 @@ function loadAvailableDates() {
                         }
                         selectedDate = dates[0];
                         dateSelect.value = selectedDate;
-                        showMessage(`✓ Found ${dates.length} date(s) - Loading latest data...`, 'success');
-                        // Auto-load latest date
-                        setTimeout(() => loadDataForSelection(), 500);
+                        showMessage(`✓ Found ${dates.length} date(s) - Select and load data`, 'success');
                     } else {
                         showMessage('No dates available for this device', 'error');
                         const loadButton = document.getElementById('load-button');
@@ -218,12 +255,13 @@ function loadAvailableDates() {
                     }
                 } catch (e) {
                     console.error('Error parsing dates:', e);
-                    showMessage('Error parsing date structure', 'error');
+                    showMessage('Error parsing date structure: ' + e.message, 'error');
+                    dateSelect.innerHTML = '<option value="">Error parsing dates</option>';
                 }
             } else {
                 console.warn('No historical data found');
                 showMessage('No historical data found for this device', 'error');
-                dateSelect.innerHTML = '<option value=\"\">No data available</option>';
+                dateSelect.innerHTML = '<option value="">No data available</option>';
                 const loadButton = document.getElementById('load-button');
                 if (loadButton) {
                     loadButton.disabled = true;
@@ -234,7 +272,7 @@ function loadAvailableDates() {
             clearTimeout(timeoutId);
             console.error('Error loading dates:', error);
             showMessage('Error: ' + error.message, 'error');
-            dateSelect.innerHTML = '<option value=\"\">Error loading dates</option>';
+            dateSelect.innerHTML = '<option value="">Error loading dates</option>';
         });
 }
 
@@ -243,7 +281,7 @@ function populateDateSelect(dates) {
     const select = document.getElementById('date-select');
     if (!select) return;
         
-    select.innerHTML = '<option value=\"\">Select a date...</option>';
+    select.innerHTML = '<option value="">Select a date...</option>';
     
     dates.forEach(date => {
         const option = document.createElement('option');
@@ -274,13 +312,13 @@ function loadDataForSelection() {
     
     const chartsContainer = document.getElementById('charts-container');
     if (chartsContainer) {
-        chartsContainer.innerHTML = '<div class=\"loading\">📊 Loading chart data...</div>';
+        chartsContainer.innerHTML = '<div class="loading">📊 Loading chart data...</div>';
     }
         
     const timeoutId = setTimeout(() => {
         console.warn('Data loading timeout');
         if (chartsContainer) {
-            chartsContainer.innerHTML = '<div class=\"error\">Timeout loading data</div>';
+            chartsContainer.innerHTML = '<div class="error">Timeout loading data</div>';
         }
     }, 15000);
     
@@ -288,7 +326,7 @@ function loadDataForSelection() {
         .once('value')
         .then((snapshot) => {
             clearTimeout(timeoutId);
-            console.log('Data loaded:', snapshot.exists());
+            console.log('Data snapshot received, exists:', snapshot.exists());
             
             if (snapshot.exists()) {
                 const hourlyData = snapshot.val();
@@ -296,7 +334,7 @@ function loadDataForSelection() {
                 updateLastUpdated();
             } else {
                 if (chartsContainer) {
-                    chartsContainer.innerHTML = '<div class=\"error\">No data found for the specified date.</div>';
+                    chartsContainer.innerHTML = '<div class="error">No data found for the specified date.</div>';
                 }
             }
         })        
@@ -304,7 +342,7 @@ function loadDataForSelection() {
             clearTimeout(timeoutId);
             console.error('Error loading data:', error);
             if (chartsContainer) {
-                chartsContainer.innerHTML = `<div class=\"error\">Error: ${error.message}</div>`;
+                chartsContainer.innerHTML = `<div class="error">Error: ${error.message}</div>`;
             }
         });
 }
@@ -348,7 +386,7 @@ function processAndDisplayData(hourlyData) {
     }
     
     if (Object.keys(chartsMap).length === 0) {
-        chartsContainer.innerHTML = '<div class=\"error\">No valid data points found (data01-data10).</div>';
+        chartsContainer.innerHTML = '<div class="error">No valid data points found (data01-data10).</div>';
     } else {
         console.log(`Created ${Object.keys(chartsMap).length} charts`);
     }
@@ -437,7 +475,7 @@ function createChart(container, dataKey, chartData) {
                         enabled: true,
                         mode: 'xy',
                         modifierKey: 'ctrl'
-                        },
+                    },
                     limits: {
                         x: { min: 'original', max: 'original' },
                         y: { min: 'original', max: 'original' }
@@ -513,7 +551,7 @@ function updateLimits() {
 function updateCharts() {
     Object.keys(chartsMap).forEach(dataKey => {
         updateLimitLines(dataKey);
-        });
+    });
 }
 
 // Update limit lines and background for a specific chart
