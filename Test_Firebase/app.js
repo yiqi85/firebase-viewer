@@ -330,6 +330,7 @@ function loadDataForSelection() {
             
             if (snapshot.exists()) {
                 const hourlyData = snapshot.val();
+                console.log('Raw data structure:', hourlyData);
                 processAndDisplayData(hourlyData);
                 updateLastUpdated();
             } else {
@@ -374,19 +375,31 @@ function processAndDisplayData(hourlyData) {
         }
     });
     
-    // Create charts for each data point (data01-data10)
-    for (let i = 1; i <= 10; i++) {
-        const dataKey = `data${String(i).padStart(2, '0')}`;
+    console.log('Data by hour keys:', Object.keys(dataByHour));
+    
+    // Get all available data keys from the first hour
+    let availableDataKeys = [];
+    const firstHour = Object.keys(dataByHour)[0];
+    if (firstHour && dataByHour[firstHour]) {
+        availableDataKeys = Object.keys(dataByHour[firstHour])
+            .filter(key => typeof dataByHour[firstHour][key] === 'number' || 
+                          (typeof dataByHour[firstHour][key] === 'string' && !isNaN(parseFloat(dataByHour[firstHour][key]))));
+    }
+    
+    console.log('Available data keys:', availableDataKeys);
+    
+    // Create charts for all available data keys
+    availableDataKeys.forEach(dataKey => {
         const chartData = extractDataForKey(dataByHour, dataKey);
         
         if (chartData && chartData.timestamps.length > 0) {
             createChart(chartsContainer, dataKey, chartData);
             currentData[dataKey] = chartData;
         }
-    }
+    });
     
     if (Object.keys(chartsMap).length === 0) {
-        chartsContainer.innerHTML = '<div class="error">No valid data points found (data01-data10).</div>';
+        chartsContainer.innerHTML = `<div class="error">No valid data points found. Available keys: ${availableDataKeys.join(', ') || 'none'}</div>`;
     } else {
         console.log(`Created ${Object.keys(chartsMap).length} charts`);
     }
@@ -402,7 +415,10 @@ function extractDataForKey(dataByHour, dataKey) {
         const hourData = dataByHour[hour];
         if (hourData && hourData[dataKey] !== undefined) {
             timestamps.push(hour);
-            values.push(parseFloat(hourData[dataKey]));
+            const value = parseFloat(hourData[dataKey]);
+            if (!isNaN(value)) {
+                values.push(value);
+            }
         }
     });
     
