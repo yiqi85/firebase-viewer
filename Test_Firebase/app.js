@@ -471,4 +471,156 @@ function createChart(container, dataKey, chartData) {
                 },
                 y: {
                     display: true,
-                    title: {\n                        display: true,\n                        text: 'Value'\n                    }\n                }\n            }\n        }\n    };\n\n    const chart = new Chart(canvas, chartConfig);\n    chartsMap[dataKey] = { chart, canvas, wrapper };\n\n    // Add limit lines and background regions\n    updateLimitLines(dataKey);\n}\n\n// Update limits\nfunction updateLimits() {\n    const upperLimit = parseFloat(document.getElementById('upper-limit').value);\n    const lowerLimit = parseFloat(document.getElementById('lower-limit').value);\n\n    if (isNaN(upperLimit) || isNaN(lowerLimit)) {\n        showMessage('Please enter valid limit values', 'error');\n        return;\n    }\n\n    if (lowerLimit >= upperLimit) {\n        showMessage('Lower limit must be less than upper limit', 'error');\n        return;\n    }\n\n    limits.upper = upperLimit;\n    limits.lower = lowerLimit;\n\n    updateCharts();\n    showMessage(`✓ Limits updated: ${lowerLimit} - ${upperLimit}`, 'success');\n}\n\n// Update all charts\nfunction updateCharts() {\n    Object.keys(chartsMap).forEach(dataKey => {\n        updateLimitLines(dataKey);\n    });\n}\n\n// Update limit lines and background for a specific chart\nfunction updateLimitLines(dataKey) {\n    if (!chartsMap[dataKey]) return;\n\n    const chart = chartsMap[dataKey].chart;\n    const showLimits = document.getElementById('show-limits');\n    const showBackground = document.getElementById('show-background');\n\n    if (!showLimits || !showBackground) return;\n\n    // Remove existing limit datasets\n    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));\n\n    if (showLimits.checked) {\n        // Add upper limit line\n        chart.data.datasets.push({\n            label: 'Upper Limit',\n            data: Array(chart.data.labels.length).fill(limits.upper),\n            borderColor: '#e74c3c',\n            borderDash: [5, 5],\n            borderWidth: 2,\n            fill: false,\n            pointRadius: 0,\n            pointHoverRadius: 0,\n            tension: 0\n        });\n\n        // Add lower limit line\n        chart.data.datasets.push({\n            label: 'Lower Limit',\n            data: Array(chart.data.labels.length).fill(limits.lower),\n            borderColor: '#3498db',\n            borderDash: [5, 5],\n            borderWidth: 2,\n            fill: false,\n            pointRadius: 0,\n            pointHoverRadius: 0,\n            tension: 0\n        });\n    }\n\n    // Add background plugin for regions\n    if (showBackground.checked) {\n        addBackgroundRegions(chart);\n    }\n\n    chart.update();\n}\n\n// Add background color regions\nfunction addBackgroundRegions(chart) {\n    const canvas = chart.canvas;\n    const ctx = chart.ctx;\n\n    // Store reference for cleanup\n    if (!canvas._originalDraw) {\n        canvas._originalDraw = Chart.controllers.line.prototype.draw;\n    }\n\n    const aboveColor = document.getElementById('above-color');\n    const normalColor = document.getElementById('normal-color');\n    const belowColor = document.getElementById('below-color');\n\n    if (!aboveColor || !normalColor || !belowColor) return;\n\n    const originalDraw = canvas._originalDraw;\n\n    Chart.controllers.line.prototype.draw = function (relRenderIndex, relRenderInfo) {\n        originalDraw.call(this, relRenderIndex, relRenderInfo);\n\n        const yScale = this.chart.scales.y;\n        const xScale = this.chart.scales.x;\n        const chartArea = this.chart.chartArea;\n\n        if (!yScale || !xScale) return;\n\n        ctx.save();\n\n        // Draw background regions\n        const upperPixel = yScale.getPixelForValue(limits.upper);\n        const lowerPixel = yScale.getPixelForValue(limits.lower);\n\n        // Above upper limit\n        ctx.fillStyle = hexToRgba(aboveColor.value, 0.15);\n        ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, upperPixel - chartArea.top);\n\n        // Between limits (normal)\n        ctx.fillStyle = hexToRgba(normalColor.value, 0.15);\n        ctx.fillRect(chartArea.left, upperPixel, chartArea.width, lowerPixel - upperPixel);\n\n        // Below lower limit\n        ctx.fillStyle = hexToRgba(belowColor.value, 0.15);\n        ctx.fillRect(chartArea.left, lowerPixel, chartArea.width, chartArea.bottom - lowerPixel);\n\n        ctx.restore();\n    };\n}\n\n// Convert hex color to rgba\nfunction hexToRgba(hex, alpha) {\n    const r = parseInt(hex.slice(1, 3), 16);\n    const g = parseInt(hex.slice(3, 5), 16);\n    const b = parseInt(hex.slice(5, 7), 16);\n    return `rgba(${r}, ${g}, ${b}, ${alpha})`;\n}\n\n// Reset zoom on all charts\nfunction resetZoom() {\n    Object.values(chartsMap).forEach(({ chart }) => {\n        chart.resetZoom();\n    });\n}\n\n// Toggle limits panel visibility\nfunction toggleLimitsPanel() {\n    const panel = document.getElementById('limits-panel');\n    const button = document.querySelector('.toggle-btn');\n    \n    if (panel && button) {\n        if (panel.classList.contains('hidden')) {\n            panel.classList.remove('hidden');\n            button.textContent = 'Hide';\n        } else {\n            panel.classList.add('hidden');\n            button.textContent = 'Show';\n        }\n    }\n}\n\n// Show message to user\nfunction showMessage(message, type) {\n    const messageDiv = document.createElement('div');\n    messageDiv.className = type === 'error' ? 'error' : 'success';\n    messageDiv.textContent = message;\n\n    const container = document.querySelector('.container');\n    if (container) {\n        container.insertBefore(messageDiv, container.firstChild);\n\n        setTimeout(() => {\n            messageDiv.remove();\n        }, 6000);\n    }\n}\n\nconsole.log('App.js loaded successfully');
+                    title: {
+                        display: true,
+                        text: 'Value'
+                    }
+                }
+            }
+        }
+    };
+    
+    const chart = new Chart(canvas, chartConfig);
+    chartsMap[dataKey] = { chart, canvas, wrapper };
+    
+    // Add limit lines and background regions
+    updateLimitLines(dataKey);
+}
+
+// Update limits
+function updateLimits() {
+    const upperLimit = parseFloat(document.getElementById('upper-limit').value);
+    const lowerLimit = parseFloat(document.getElementById('lower-limit').value);
+    
+    if (isNaN(upperLimit) || isNaN(lowerLimit)) {
+        showMessage('Please enter valid limit values', 'error');
+        return;
+    }
+        
+    if (lowerLimit >= upperLimit) {
+        showMessage('Lower limit must be less than upper limit', 'error');
+        return;
+    }
+        
+    limits.upper = upperLimit;
+    limits.lower = lowerLimit;
+    
+    updateCharts();
+    showMessage(`✓ Limits updated: ${lowerLimit} - ${upperLimit}`, 'success');
+}
+
+// Update all charts
+function updateCharts() {
+    Object.keys(chartsMap).forEach(dataKey => {
+        updateLimitLines(dataKey);
+        });
+}
+
+// Update limit lines and background for a specific chart
+function updateLimitLines(dataKey) {
+    if (!chartsMap[dataKey]) return;
+        
+    const chart = chartsMap[dataKey].chart;
+    const showLimits = document.getElementById('show-limits');
+    const showBackground = document.getElementById('show-background');
+    
+    if (!showLimits || !showBackground) return;
+        
+    // Remove existing limit datasets
+    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));
+    
+    if (showLimits.checked) {
+        // Add upper limit line
+        chart.data.datasets.push({
+            label: 'Upper Limit',
+            data: Array(chart.data.labels.length).fill(limits.upper),
+            borderColor: '#e74c3c',
+            borderDash: [5, 5],
+            borderWidth: 2,
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tension: 0
+        });
+        
+        // Add lower limit line
+        chart.data.datasets.push({
+            label: 'Lower Limit',
+            data: Array(chart.data.labels.length).fill(limits.lower),
+            borderColor: '#3498db',
+            borderDash: [5, 5],
+            borderWidth: 2,
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tension: 0
+        });
+    }
+    // Add background plugin for regions
+    if (showBackground.checked) {
+        addBackgroundRegions(chart);
+    }
+    
+    chart.update();
+}
+
+// Add background color regions
+function addBackgroundRegions(chart) {
+    const canvas = chart.canvas;
+    const ctx = chart.ctx;
+    
+    // Store reference for cleanup
+    if (!canvas._originalDraw) {
+        canvas._originalDraw = Chart.controllers.line.prototype.draw;
+    }
+    
+    const aboveColor = document.getElementById('above-color');
+    const normalColor = document.getElementById('normal-color');
+    const belowColor = document.getElementById('below-color');
+    
+    if (!aboveColor || !normalColor || !belowColor) return;
+    
+    const originalDraw = canvas._originalDraw;
+    
+    Chart.controllers.line.prototype.draw = function (relRenderIndex, relRenderInfo) {
+        originalDraw.call(this, relRenderIndex, relRenderInfo);
+        
+        const yScale = this.chart.scales.y;
+        const xScale = this.chart.scales.x;
+        const chartArea = this.chart.chartArea;
+        
+        if (!yScale || !xScale) return;
+        
+        ctx.save();
+        
+        // Draw background regions
+        const upperPixel = yScale.getPixelForValue(limits.upper);
+        const lowerPixel = yScale.getPixelForValue(limits.lower);
+        
+        // Above upper limit
+        ctx.fillStyle = hexToRgba(aboveColor.value, 0.15);
+        ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, upperPixel - chartArea.top);
+        
+        // Between limits (normal)
+        ctx.fillStyle = hexToRgba(normalColor.value, 0.15);
+        ctx.fillRect(chartArea.left, upperPixel, chartArea.width, lowerPixel - upperPixel);
+        
+        // Below lower limit
+        ctx.fillStyle = hexToRgba(belowColor.value, 0.15);
+        ctx.fillRect(chartArea.left, lowerPixel, chartArea.width, chartArea.bottom - lowerPixel);
+        
+        ctx.restore();
+    };
+}
+
+// Convert hex color to rgba
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Reset zoom on all charts
+function resetZoom() {
+    Object.values(chartsMap).forEach(({ chart }) => {\n        chart.resetZoom();\n    });\n}\n\n// Toggle limits panel visibility\nfunction toggleLimitsPanel() {\n    const panel = document.getElementById('limits-panel');\n    const button = document.querySelector('.toggle-btn');\n    \n    if (panel && button) {\n        if (panel.classList.contains('hidden')) {\n            panel.classList.remove('hidden');\n            button.textContent = 'Hide';\n        } else {\n            panel.classList.add('hidden');\n            button.textContent = 'Show';\n        }\n    }\n}\n\n// Show message to user\nfunction showMessage(message, type) {\n    const messageDiv = document.createElement('div');\n    messageDiv.className = type === 'error' ? 'error' : 'success';\n    messageDiv.textContent = message;\n\n    const container = document.querySelector('.container');\n    if (container) {\n        container.insertBefore(messageDiv, container.firstChild);\n\n        setTimeout(() => {\n            messageDiv.remove();\n        }, 6000);\n    }\n}\n\nconsole.log('App.js loaded successfully');
