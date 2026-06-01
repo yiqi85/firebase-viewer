@@ -623,4 +623,39 @@ function hexToRgba(hex, alpha) {
 
 // Reset zoom on all charts
 function resetZoom() {
-    Object.values(chartsMap).forEach(({ chart }) => {\n        chart.resetZoom();\n    });\n}\n\n// Toggle limits panel visibility\nfunction toggleLimitsPanel() {\n    const panel = document.getElementById('limits-panel');\n    const button = document.querySelector('.toggle-btn');\n    \n    if (panel && button) {\n        if (panel.classList.contains('hidden')) {\n            panel.classList.remove('hidden');\n            button.textContent = 'Hide';\n        } else {\n            panel.classList.add('hidden');\n            button.textContent = 'Show';\n        }\n    }\n}\n\n// Show message to user\nfunction showMessage(message, type) {\n    const messageDiv = document.createElement('div');\n    messageDiv.className = type === 'error' ? 'error' : 'success';\n    messageDiv.textContent = message;\n\n    const container = document.querySelector('.container');\n    if (container) {\n        container.insertBefore(messageDiv, container.firstChild);\n\n        setTimeout(() => {\n            messageDiv.remove();\n        }, 6000);\n    }\n}\n\nconsole.log('App.js loaded successfully');
+    Object.values(chartsMap).forEach(({ chart }) => {
+        chart.resetZoom();
+    });
+}
+
+// Toggle limits panel visibility
+function toggleLimitsPanel() {
+    const panel = document.getElementById('limits-panel');
+    const button = document.querySelector('.toggle-btn');
+    
+    if (panel && button) {
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+            button.textContent = 'Hide';
+        } else {
+            panel.classList.add('hidden');
+            button.textContent = 'Show';
+        }
+    }
+}
+
+// Show message to user
+function showMessage(message, type) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = type === 'error' ? 'error' : 'success';
+    messageDiv.textContent = message;
+    const container = document.querySelector('.container');
+    if (container) {
+        container.insertBefore(messageDiv, container.firstChild);
+        setTimeout(() => {
+            messageDiv.remove();
+        }, 6000);
+    }
+}
+
+console.log('App.js loaded successfully');
