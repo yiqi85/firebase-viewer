@@ -3,6 +3,7 @@ let db = null;
 let chartsMap = {};
 let currentData = {};
 let deviceList = [];
+let userAccessibleDevices = [];
 let selectedDevice = null;
 let selectedDate = null;
 let limits = {
@@ -13,26 +14,27 @@ let limits = {
 // Per-chart limits storage
 let chartLimits = {};
 
+// Current user session
+let currentUser = null;
+
 // Connection status tracking
 let connectionStatus = {
     connected: false,
     lastUpdate: null
 };
 
-// Initialize Firebase and auto-connect
+// Initialize on DOM load
 window.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded, starting initialization');
-    initializeFirebaseAuto();
+    initializeFirebase();
 });
 
-// Auto-initialize Firebase
-function initializeFirebaseAuto() {
+// Initialize Firebase
+function initializeFirebase() {
     try {
-        // Check if firebaseConfig is available
         if (typeof firebaseConfig === 'undefined') {
             console.error('Firebase config not found');
-            updateConnectionStatus(false, 'Firebase config not found');
-            showMessage('Firebase config not found', 'error');
+            showLoginMessage('Firebase config not found', 'error');
             return;
         }
 
@@ -40,52 +42,119 @@ function initializeFirebaseAuto() {
         firebase.initializeApp(firebaseConfig);
         db = firebase.database();
         console.log('Firebase initialized');
-        updateConnectionStatus(true, 'Connecting...');
-        
-        // Test connection by reading root data
-        const timeoutId = setTimeout(() => {
-            console.warn('Connection timeout - check Firebase database');
-            updateConnectionStatus(false, 'Connection timeout');
-            showMessage('Connection timeout - Check Firebase permissions and database URL', 'error');
-        }, 10000);
-
-        db.ref('/').limitToFirst(1).once('value')
-            .then((snapshot) => {
-                clearTimeout(timeoutId);
-                console.log('Firebase connection test successful');
-                updateConnectionStatus(true, 'Connected');
-                
-                // Now load devices
-                loadDevicesList();
-            })
-            .catch(error => {
-                clearTimeout(timeoutId);
-                console.error('Connection test failed:', error);
-                updateConnectionStatus(false, 'Connection failed');
-                showMessage('Error: ' + error.message, 'error');
-            });
-        
+        updateLoginStatus('Firebase connected, ready for login');
     } catch (error) {
         console.error('Firebase initialization error:', error);
-        updateConnectionStatus(false, 'Initialization error');
-        showMessage('Firebase Error: ' + error.message, 'error');
+        showLoginMessage('Firebase Error: ' + error.message, 'error');
     }
 }
 
-// Load devices list
-function loadDevicesList() {
+// Handle login
+function handleLogin(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    
+    if (!username || !password) {
+        showLoginMessage('Please enter both username and password', 'error');
+        return;
+    }
+    
+    updateLoginStatus('Authenticating...');
+    const passwordHash = CryptoJS.SHA256(password).toString();
+    
+    authenticateUser(username, passwordHash);
+}
+
+// Authenticate user
+function authenticateUser(username, passwordHash) {
+    db.ref('Users').once('value')
+        .then((snapshot) => {
+            if (!snapshot.exists()) {
+                showLoginMessage('No users found in database', 'error');
+                updateLoginStatus('Authentication failed');
+                return;
+            }
+            
+            const usersData = snapshot.val();
+            let foundUser = null;
+            let foundUserId = null;
+            
+            // Search for user by name
+            for (const userId in usersData) {
+                const user = usersData[userId];
+                if (user.name === username && user.password === passwordHash) {
+                    foundUser = user;
+                    foundUserId = userId;
+                    break;
+                }
+            }
+            
+            if (!foundUser) {
+                showLoginMessage('Invalid username or password', 'error');
+                updateLoginStatus('Authentication failed');
+                return;
+            }
+            
+            // Authentication successful
+            console.log('User authenticated:', foundUserId);
+            currentUser = {
+                id: foundUserId,
+                name: foundUser.name,
+                devices_access: foundUser.devices_access || {}
+            };
+            
+            showLoginMessage(`Welcome, ${foundUser.name}!`, 'success');
+            updateLoginStatus('Authentication successful');
+            
+            // Transition to viewer page
+            setTimeout(() => {
+                transitionToViewerPage();
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Authentication error:', error);
+            showLoginMessage('Error: ' + error.message, 'error');
+            updateLoginStatus('Authentication failed');
+        });
+}
+
+// Transition to viewer page
+function transitionToViewerPage() {
+    document.getElementById('login-page').classList.add('hidden');
+    document.getElementById('viewer-page').classList.remove('hidden');
+    
+    // Clear login form
+    document.getElementById('login-form').reset();
+    document.getElementById('login-message').textContent = '';
+    document.getElementById('login-message').className = 'login-message';
+    
+    // Initialize viewer
+    initializeViewer();
+}
+
+// Initialize viewer
+function initializeViewer() {
+    console.log('Initializing viewer for user:', currentUser.name);
+    updateConnectionStatus(true, 'Connecting...');
+    loadAllDevices();
+}
+
+// Load all available devices
+function loadAllDevices() {
     if (!db) {
         console.error('Database not available');
         return;
     }
-
-    console.log('Loading devices list...');
+    
+    console.log('Loading all devices...');
     const timeoutId = setTimeout(() => {
         console.warn('Device list loading timeout');
         updateConnectionStatus(false, 'Device load timeout');
         showMessage('Timeout loading devices', 'error');
     }, 10000);
-
+    
     db.ref('Devices').once('value')
         .then((snapshot) => {
             clearTimeout(timeoutId);
@@ -93,15 +162,15 @@ function loadDevicesList() {
             
             if (snapshot.exists()) {
                 deviceList = Object.keys(snapshot.val());
-                console.log('Devices found:', deviceList);
-                populateDeviceSelect();
+                console.log('All devices available:', deviceList);
+                
+                // Filter devices based on user access
+                filterUserAccessibleDevices();
                 updateConnectionStatus(true, 'Connected');
-                showMessage(`✓ Connected! Loaded ${deviceList.length} device(s)`, 'success');
             } else {
                 console.warn('No devices found in database');
                 updateConnectionStatus(true, 'Connected (no devices)');
-                showMessage('No devices found. Check your database structure.', 'error');
-                populateDeviceSelect([]); // Show empty dropdown
+                showMessage('No devices found in database', 'error');
             }
         })
         .catch(error => {
@@ -110,6 +179,35 @@ function loadDevicesList() {
             updateConnectionStatus(false, 'Failed to load devices');
             showMessage('Error: ' + error.message, 'error');
         });
+}
+
+// Filter devices based on user access
+function filterUserAccessibleDevices() {
+    userAccessibleDevices = [];
+    const userDeviceAccess = currentUser.devices_access || {};
+    
+    console.log('User device access:', userDeviceAccess);
+    
+    // Check each device in user's access list
+    for (const deviceId in userDeviceAccess) {
+        // Verify the device exists in the main Devices list
+        if (deviceList.includes(deviceId)) {
+            userAccessibleDevices.push(deviceId);
+        } else {
+            console.warn(`Device ${deviceId} in user access list not found in main Devices`);
+        }
+    }
+    
+    console.log('User accessible devices:', userAccessibleDevices);
+    
+    if (userAccessibleDevices.length === 0) {
+        showMessage('You do not have access to any devices', 'error');
+        document.getElementById('device-select').innerHTML = '<option value="">No devices available</option>';
+        return;
+    }
+    
+    populateDeviceSelect(userAccessibleDevices);
+    showMessage(`✓ Loaded ${userAccessibleDevices.length} device(s) you can access`, 'success');
 }
 
 // Update connection status indicator
@@ -123,7 +221,7 @@ function updateConnectionStatus(connected, message) {
         console.warn('Status elements not found');
         return;
     }
-        
+    
     connectionStatus.connected = connected;
     connectionStatus.lastUpdate = new Date();
     
@@ -148,7 +246,7 @@ function populateDeviceSelect(devices = null) {
         return;
     }
     
-    const devList = devices !== null ? devices : deviceList;
+    const devList = devices !== null ? devices : userAccessibleDevices;
     select.innerHTML = '<option value="">Select a device...</option>';
     
     if (devList.length === 0) {
@@ -198,10 +296,10 @@ function loadAvailableDates() {
         showMessage('Please select a device', 'error');
         return;
     }
-        
+    
     const dateSelect = document.getElementById('date-select');
     if (!dateSelect) return;
-        
+    
     dateSelect.innerHTML = '<option value="">Loading dates...</option>';
     console.log('Loading dates for device:', selectedDevice);
     
@@ -221,7 +319,6 @@ function loadAvailableDates() {
                 const yearData = snapshot.val();
                 const dates = [];
                 
-                // Extract all dates in YYYY-MM-DD format
                 try {
                     Object.keys(yearData).forEach(year => {
                         if (typeof yearData[year] === 'object') {
@@ -235,7 +332,6 @@ function loadAvailableDates() {
                         }
                     });
                     
-                    // Sort dates in descending order (latest first)
                     dates.sort().reverse();
                     console.log('Dates found:', dates.length);
                     
@@ -283,7 +379,7 @@ function loadAvailableDates() {
 function populateDateSelect(dates) {
     const select = document.getElementById('date-select');
     if (!select) return;
-        
+    
     select.innerHTML = '<option value="">Select a date...</option>';
     
     dates.forEach(date => {
@@ -292,7 +388,7 @@ function populateDateSelect(dates) {
         option.textContent = date;
         select.appendChild(option);
     });
-}    
+}
 
 // Handle date selection change
 function onDateChange() {
@@ -318,7 +414,7 @@ function loadDataForSelection() {
     if (chartsContainer) {
         chartsContainer.innerHTML = '<div class="loading">📊 Loading chart data...</div>';
     }
-        
+    
     const timeoutId = setTimeout(() => {
         console.warn('Data loading timeout');
         if (chartsContainer) {
@@ -349,7 +445,7 @@ function loadDataForSelection() {
                     chartsContainer.innerHTML = '<div class="error">No data found for the specified date.</div>';
                 }
             }
-        })        
+        })
         .catch(error => {
             clearTimeout(timeoutId);
             console.error('Error loading data:', error);
@@ -373,13 +469,12 @@ function processAndDisplayData(hourlyData) {
     console.log('=== PROCESS DATA START ===');
     const chartsContainer = document.getElementById('charts-container');
     if (!chartsContainer) return;
-        
+    
     chartsContainer.innerHTML = '';
     chartsMap = {};
     currentData = {};
     chartLimits = {};
     
-    // Group data by hour
     const dataByHour = {};
     
     Object.entries(hourlyData).forEach(([hour, hourData]) => {
@@ -398,7 +493,6 @@ function processAndDisplayData(hourlyData) {
         return;
     }
     
-    // Get all available data keys from the first hour
     const firstHour = hourKeys[0];
     const firstHourData = dataByHour[firstHour];
     console.log('First hour:', firstHour);
@@ -408,11 +502,9 @@ function processAndDisplayData(hourlyData) {
     let availableDataKeys = [];
     
     if (firstHourData && typeof firstHourData === 'object') {
-        // Get all keys from the first hour
         const allKeys = Object.keys(firstHourData);
         console.log('All keys in first hour:', allKeys);
         
-        // Filter to only numeric values
         availableDataKeys = allKeys.filter(key => {
             const value = firstHourData[key];
             const isNumeric = typeof value === 'number' || 
@@ -424,14 +516,12 @@ function processAndDisplayData(hourlyData) {
     
     console.log('Available numeric data keys:', availableDataKeys);
     
-    // Create charts for all available data keys
     availableDataKeys.forEach(dataKey => {
         const chartData = extractDataForKey(dataByHour, dataKey);
         
         if (chartData && chartData.timestamps.length > 0) {
             console.log(`Creating chart for ${dataKey}`);
             
-            // Initialize per-chart limits
             chartLimits[dataKey] = {
                 upper: limits.upper,
                 lower: limits.lower
@@ -486,7 +576,6 @@ function createChart(container, dataKey, chartData) {
     title.textContent = dataKey.toUpperCase();
     headerContainer.appendChild(title);
     
-    // Add settings button
     const settingsBtn = document.createElement('button');
     settingsBtn.className = 'chart-settings-btn';
     settingsBtn.textContent = '⚙️ Settings';
@@ -495,7 +584,6 @@ function createChart(container, dataKey, chartData) {
     
     wrapper.appendChild(headerContainer);
     
-    // Add hidden limits panel
     const limitsPanel = document.createElement('div');
     limitsPanel.className = 'chart-limits-panel hidden';
     limitsPanel.id = `limits-${dataKey}`;
@@ -547,7 +635,6 @@ function createChart(container, dataKey, chartData) {
     wrapper.appendChild(canvasDiv);
     container.appendChild(wrapper);
     
-    // Prepare chart data
     const chartConfig = {
         type: 'line',
         data: {
@@ -638,7 +725,6 @@ function createChart(container, dataKey, chartData) {
     const chart = new Chart(canvas, chartConfig);
     chartsMap[dataKey] = { chart, canvas, wrapper };
     
-    // Add limit lines and background regions
     updateChartLimitLines(dataKey);
 }
 
@@ -695,11 +781,9 @@ function updateChartLimitLines(dataKey) {
     
     const chartLimit = chartLimits[dataKey] || limits;
     
-    // Remove existing limit datasets
     chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));
     
     if (showLimits.checked) {
-        // Add upper limit line
         chart.data.datasets.push({
             label: 'Upper Limit',
             data: Array(chart.data.labels.length).fill(chartLimit.upper),
@@ -712,7 +796,6 @@ function updateChartLimitLines(dataKey) {
             tension: 0
         });
         
-        // Add lower limit line
         chart.data.datasets.push({
             label: 'Lower Limit',
             data: Array(chart.data.labels.length).fill(chartLimit.lower),
@@ -726,7 +809,6 @@ function updateChartLimitLines(dataKey) {
         });
     }
     
-    // Add background plugin for regions
     if (showBackground.checked) {
         addBackgroundRegions(chart, chartLimit);
     }
@@ -743,12 +825,12 @@ function updateLimits() {
         showMessage('Please enter valid limit values', 'error');
         return;
     }
-        
+    
     if (lowerLimit >= upperLimit) {
         showMessage('Lower limit must be less than upper limit', 'error');
         return;
     }
-        
+    
     limits.upper = upperLimit;
     limits.lower = lowerLimit;
     
@@ -768,7 +850,6 @@ function addBackgroundRegions(chart, chartLimit) {
     const canvas = chart.canvas;
     const ctx = chart.ctx;
     
-    // Store reference for cleanup
     if (!canvas._originalDraw) {
         canvas._originalDraw = Chart.controllers.line.prototype.draw;
     }
@@ -792,19 +873,15 @@ function addBackgroundRegions(chart, chartLimit) {
         
         ctx.save();
         
-        // Draw background regions
         const upperPixel = yScale.getPixelForValue(chartLimit.upper);
         const lowerPixel = yScale.getPixelForValue(chartLimit.lower);
         
-        // Above upper limit
         ctx.fillStyle = hexToRgba(aboveColor.value, 0.15);
         ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, upperPixel - chartArea.top);
         
-        // Between limits (normal)
         ctx.fillStyle = hexToRgba(normalColor.value, 0.15);
         ctx.fillRect(chartArea.left, upperPixel, chartArea.width, lowerPixel - upperPixel);
         
-        // Below lower limit
         ctx.fillStyle = hexToRgba(belowColor.value, 0.15);
         ctx.fillRect(chartArea.left, lowerPixel, chartArea.width, chartArea.bottom - lowerPixel);
         
@@ -843,6 +920,26 @@ function toggleLimitsPanel() {
     }
 }
 
+// Handle logout
+function handleLogout() {
+    if (confirm('Are you sure you want to logout?')) {
+        currentUser = null;
+        selectedDevice = null;
+        selectedDate = null;
+        userAccessibleDevices = [];
+        chartsMap = {};
+        currentData = {};
+        
+        document.getElementById('viewer-page').classList.add('hidden');
+        document.getElementById('login-page').classList.remove('hidden');
+        
+        document.getElementById('login-form').reset();
+        document.getElementById('login-message').textContent = '';
+        document.getElementById('login-message').className = 'login-message';
+        updateLoginStatus('Ready');
+    }
+}
+
 // Show message to user
 function showMessage(message, type) {
     const messageDiv = document.createElement('div');
@@ -854,6 +951,22 @@ function showMessage(message, type) {
         setTimeout(() => {
             messageDiv.remove();
         }, 6000);
+    }
+}
+
+// Login page message functions
+function showLoginMessage(message, type) {
+    const messageDiv = document.getElementById('login-message');
+    if (messageDiv) {
+        messageDiv.textContent = message;
+        messageDiv.className = `login-message ${type}`;
+    }
+}
+
+function updateLoginStatus(status) {
+    const statusDiv = document.getElementById('login-status');
+    if (statusDiv) {
+        statusDiv.textContent = status;
     }
 }
 
