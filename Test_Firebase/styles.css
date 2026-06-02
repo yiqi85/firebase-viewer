@@ -434,12 +434,78 @@ button:disabled {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.chart-wrapper h4 {
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 12px;
+    gap: 10px;
+}
+
+.chart-wrapper h4 {
+    margin: 0;
     color: var(--primary-color);
     font-size: 1em;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex: 1;
+}
+
+.chart-settings-btn {
+    padding: 6px 12px;
+    font-size: 0.85em;
+    background-color: var(--secondary-color);
+    white-space: nowrap;
+}
+
+.chart-settings-btn:hover {
+    background-color: #2980b9;
+}
+
+.chart-limits-panel {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #ecf0f1;
+    border-radius: 4px;
+    border-left: 4px solid var(--secondary-color);
+    animation: slideDown 0.3s ease;
+}
+
+.chart-limits-panel.hidden {
+    display: none;
+}
+
+.chart-limits-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.chart-limit-input {
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-limit-input label {
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 0.85em;
+}
+
+.chart-limit-input input {
+    padding: 6px 8px;
+    font-size: 0.85em;
+}
+
+.apply-chart-limits-btn {
+    padding: 6px 12px;
+    font-size: 0.85em;
+    background-color: var(--success-color);
+}
+
+.apply-chart-limits-btn:hover {
+    background-color: #229954;
 }
 
 .chart-canvas {
@@ -513,6 +579,15 @@ footer {
         flex-direction: column;
         align-items: flex-start;
     }
+
+    .chart-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .chart-limits-content {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 480px) {
@@ -539,5 +614,14 @@ footer {
 
     .data-display-section {
         padding: 15px;
+    }
+
+    .chart-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .chart-limits-content {
+        grid-template-columns: 1fr;
     }
 }

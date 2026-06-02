@@ -10,6 +10,9 @@ let limits = {
     lower: 25
 };
 
+// Per-chart limits storage
+let chartLimits = {};
+
 // Connection status tracking
 let connectionStatus = {
     connected: false,
@@ -374,6 +377,7 @@ function processAndDisplayData(hourlyData) {
     chartsContainer.innerHTML = '';
     chartsMap = {};
     currentData = {};
+    chartLimits = {};
     
     // Group data by hour
     const dataByHour = {};
@@ -426,6 +430,13 @@ function processAndDisplayData(hourlyData) {
         
         if (chartData && chartData.timestamps.length > 0) {
             console.log(`Creating chart for ${dataKey}`);
+            
+            // Initialize per-chart limits
+            chartLimits[dataKey] = {
+                upper: limits.upper,
+                lower: limits.lower
+            };
+            
             createChart(chartsContainer, dataKey, chartData);
             currentData[dataKey] = chartData;
         }
@@ -468,9 +479,65 @@ function createChart(container, dataKey, chartData) {
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper';
     
+    const headerContainer = document.createElement('div');
+    headerContainer.className = 'chart-header';
+    
     const title = document.createElement('h4');
     title.textContent = dataKey.toUpperCase();
-    wrapper.appendChild(title);
+    headerContainer.appendChild(title);
+    
+    // Add settings button
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'chart-settings-btn';
+    settingsBtn.textContent = '⚙️ Settings';
+    settingsBtn.onclick = () => toggleChartLimitsPanel(dataKey);
+    headerContainer.appendChild(settingsBtn);
+    
+    wrapper.appendChild(headerContainer);
+    
+    // Add hidden limits panel
+    const limitsPanel = document.createElement('div');
+    limitsPanel.className = 'chart-limits-panel hidden';
+    limitsPanel.id = `limits-${dataKey}`;
+    
+    const limitsContent = document.createElement('div');
+    limitsContent.className = 'chart-limits-content';
+    
+    const upperLimitDiv = document.createElement('div');
+    upperLimitDiv.className = 'chart-limit-input';
+    const upperLabel = document.createElement('label');
+    upperLabel.textContent = 'Upper Limit:';
+    const upperInput = document.createElement('input');
+    upperInput.type = 'number';
+    upperInput.value = chartLimits[dataKey]?.upper || 75;
+    upperInput.step = '0.1';
+    upperInput.id = `upper-limit-${dataKey}`;
+    upperLimitDiv.appendChild(upperLabel);
+    upperLimitDiv.appendChild(upperInput);
+    
+    const lowerLimitDiv = document.createElement('div');
+    lowerLimitDiv.className = 'chart-limit-input';
+    const lowerLabel = document.createElement('label');
+    lowerLabel.textContent = 'Lower Limit:';
+    const lowerInput = document.createElement('input');
+    lowerInput.type = 'number';
+    lowerInput.value = chartLimits[dataKey]?.lower || 25;
+    lowerInput.step = '0.1';
+    lowerInput.id = `lower-limit-${dataKey}`;
+    lowerLimitDiv.appendChild(lowerLabel);
+    lowerLimitDiv.appendChild(lowerInput);
+    
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'apply-chart-limits-btn';
+    applyBtn.textContent = 'Apply';
+    applyBtn.onclick = () => applyChartLimits(dataKey);
+    
+    limitsContent.appendChild(upperLimitDiv);
+    limitsContent.appendChild(lowerLimitDiv);
+    limitsContent.appendChild(applyBtn);
+    
+    limitsPanel.appendChild(limitsContent);
+    wrapper.appendChild(limitsPanel);
     
     const canvasDiv = document.createElement('div');
     canvasDiv.className = 'chart-canvas';
@@ -572,10 +639,102 @@ function createChart(container, dataKey, chartData) {
     chartsMap[dataKey] = { chart, canvas, wrapper };
     
     // Add limit lines and background regions
-    updateLimitLines(dataKey);
+    updateChartLimitLines(dataKey);
 }
 
-// Update limits
+// Toggle chart limits panel visibility
+function toggleChartLimitsPanel(dataKey) {
+    const panel = document.getElementById(`limits-${dataKey}`);
+    if (panel) {
+        panel.classList.toggle('hidden');
+    }
+}
+
+// Apply limits to a specific chart
+function applyChartLimits(dataKey) {
+    const upperInput = document.getElementById(`upper-limit-${dataKey}`);
+    const lowerInput = document.getElementById(`lower-limit-${dataKey}`);
+    
+    if (!upperInput || !lowerInput) {
+        showMessage('Limit inputs not found', 'error');
+        return;
+    }
+    
+    const upperLimit = parseFloat(upperInput.value);
+    const lowerLimit = parseFloat(lowerInput.value);
+    
+    if (isNaN(upperLimit) || isNaN(lowerLimit)) {
+        showMessage('Please enter valid limit values', 'error');
+        return;
+    }
+    
+    if (lowerLimit >= upperLimit) {
+        showMessage('Lower limit must be less than upper limit', 'error');
+        return;
+    }
+    
+    chartLimits[dataKey] = {
+        upper: upperLimit,
+        lower: lowerLimit
+    };
+    
+    updateChartLimitLines(dataKey);
+    showMessage(`✓ Limits updated for ${dataKey}: ${lowerLimit} - ${upperLimit}`, 'success');
+    toggleChartLimitsPanel(dataKey);
+}
+
+// Update limit lines for a specific chart
+function updateChartLimitLines(dataKey) {
+    if (!chartsMap[dataKey]) return;
+    
+    const chart = chartsMap[dataKey].chart;
+    const showLimits = document.getElementById('show-limits');
+    const showBackground = document.getElementById('show-background');
+    
+    if (!showLimits || !showBackground) return;
+    
+    const chartLimit = chartLimits[dataKey] || limits;
+    
+    // Remove existing limit datasets
+    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));
+    
+    if (showLimits.checked) {
+        // Add upper limit line
+        chart.data.datasets.push({
+            label: 'Upper Limit',
+            data: Array(chart.data.labels.length).fill(chartLimit.upper),
+            borderColor: '#e74c3c',
+            borderDash: [5, 5],
+            borderWidth: 2,
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tension: 0
+        });
+        
+        // Add lower limit line
+        chart.data.datasets.push({
+            label: 'Lower Limit',
+            data: Array(chart.data.labels.length).fill(chartLimit.lower),
+            borderColor: '#3498db',
+            borderDash: [5, 5],
+            borderWidth: 2,
+            fill: false,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tension: 0
+        });
+    }
+    
+    // Add background plugin for regions
+    if (showBackground.checked) {
+        addBackgroundRegions(chart, chartLimit);
+    }
+    
+    chart.update();
+}
+
+// Update limits (global)
 function updateLimits() {
     const upperLimit = parseFloat(document.getElementById('upper-limit').value);
     const lowerLimit = parseFloat(document.getElementById('lower-limit').value);
@@ -600,60 +759,12 @@ function updateLimits() {
 // Update all charts
 function updateCharts() {
     Object.keys(chartsMap).forEach(dataKey => {
-        updateLimitLines(dataKey);
+        updateChartLimitLines(dataKey);
     });
 }
 
-// Update limit lines and background for a specific chart
-function updateLimitLines(dataKey) {
-    if (!chartsMap[dataKey]) return;
-        
-    const chart = chartsMap[dataKey].chart;
-    const showLimits = document.getElementById('show-limits');
-    const showBackground = document.getElementById('show-background');
-    
-    if (!showLimits || !showBackground) return;
-        
-    // Remove existing limit datasets
-    chart.data.datasets = chart.data.datasets.filter(ds => !ds.label.includes('Limit'));
-    
-    if (showLimits.checked) {
-        // Add upper limit line
-        chart.data.datasets.push({
-            label: 'Upper Limit',
-            data: Array(chart.data.labels.length).fill(limits.upper),
-            borderColor: '#e74c3c',
-            borderDash: [5, 5],
-            borderWidth: 2,
-            fill: false,
-            pointRadius: 0,
-            pointHoverRadius: 0,
-            tension: 0
-        });
-        
-        // Add lower limit line
-        chart.data.datasets.push({
-            label: 'Lower Limit',
-            data: Array(chart.data.labels.length).fill(limits.lower),
-            borderColor: '#3498db',
-            borderDash: [5, 5],
-            borderWidth: 2,
-            fill: false,
-            pointRadius: 0,
-            pointHoverRadius: 0,
-            tension: 0
-        });
-    }
-    // Add background plugin for regions
-    if (showBackground.checked) {
-        addBackgroundRegions(chart);
-    }
-    
-    chart.update();
-}
-
 // Add background color regions
-function addBackgroundRegions(chart) {
+function addBackgroundRegions(chart, chartLimit) {
     const canvas = chart.canvas;
     const ctx = chart.ctx;
     
@@ -682,8 +793,8 @@ function addBackgroundRegions(chart) {
         ctx.save();
         
         // Draw background regions
-        const upperPixel = yScale.getPixelForValue(limits.upper);
-        const lowerPixel = yScale.getPixelForValue(limits.lower);
+        const upperPixel = yScale.getPixelForValue(chartLimit.upper);
+        const lowerPixel = yScale.getPixelForValue(chartLimit.lower);
         
         // Above upper limit
         ctx.fillStyle = hexToRgba(aboveColor.value, 0.15);
