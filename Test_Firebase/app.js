@@ -970,4 +970,4 @@ function updateLoginStatus(status) {
     }
 }
 
-console.log('App.js loaded successfully');
+console.log('App.js loaded successfully')
